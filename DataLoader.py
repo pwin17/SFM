@@ -20,6 +20,7 @@ def readK(filedir):
 
 def getFeatures(filepath):
     featurefiles = glob.glob(filepath)
+    featurefiles.sort() 
     mp1 = []
     mp2 = []
     # rgb = []
@@ -42,10 +43,10 @@ def getFeatures(filepath):
                 j = 6
                 while numFeatures>1:
                     # rgb.append(featurergb)
-                    pair = (1,line[j])
+                    pair = [main_img,line[j]]
                     img_pairs.append(pair)
                     mp1.append(mainFeature)
                     mp2.append([float(line[j+1]), float(line[j+2]), float(1)])
                     j += 3
                     numFeatures -= 1
-    return np.array(mp1), np.array(mp2), img_pairs
+    return np.array(mp1), np.array(mp2), np.array(img_pairs)
