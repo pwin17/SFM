@@ -15,7 +15,7 @@ def get_best_pose(pts_3D_all, R, C):
         if positive_z > max_positive_z:
             max_positive_z = positive_z
             idx = i
-    return R[idx], C[idx]
+    return R[idx], C[idx], pts_3D_all[idx]
 
 def get_positive_z_count(pts_3D,C,r3):
     positive_z = 0
