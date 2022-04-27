@@ -11,7 +11,7 @@ def reprojection_error(X, x, P1, P2, P3):
 def PnPRANSAC(K, x, X, numIter, threshold):
     num_correspondences = 0
     for _ in range(numIter):
-        # Randomly select 8 points
+        # Randomly select 6 points
         rand_idx = np.random.randint(0, X.shape[0], 6)
         X_hat = X[rand_idx]
         x_hat = x[rand_idx]

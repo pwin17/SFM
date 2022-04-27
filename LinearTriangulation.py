@@ -1,5 +1,5 @@
 import numpy as np
-
+# http://www.cs.cmu.edu/~16385/s17/Slides/11.4_Triangulation.pdf
 def getP(K, R, C):
     P = np.dot(np.dot(K,R), C)
     P1, P2, P3 = P[0,:].T, P[1,:].T, P[2,:].T

@@ -49,4 +49,4 @@ def getFeatures(filepath):
                     mp2.append([float(line[j+1]), float(line[j+2]), float(1)])
                     j += 3
                     numFeatures -= 1
-    return np.array(mp1), np.array(mp2), np.array(img_pairs)
+    return np.array(mp1), np.array(mp2), np.array(img_pairs), len(featurefiles)

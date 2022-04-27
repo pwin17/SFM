@@ -9,6 +9,7 @@ from EsstentialMatrixFromFundamentalMatrix import *
 from ExtractCameraPose import *
 from LinearTriangulation import *
 from DisambiguateCameraPose import *
+from NonlinearPnP import NonlinearPnp
 from NonlinearTriangulation import *
 from LinearPnP import *
 from PnPRANSAC import PnPRANSAC
@@ -23,8 +24,11 @@ def main():
     print("\nK:\n", K)
 
     # Get features from matching files
-    mp1, mp2, img_pairs = getFeatures(features_path)
+    mp1, mp2, img_pairs, num_images = getFeatures(features_path)
     print("\nMatch points and image pairs(mp1, mp2, pair):\n", mp1.shape, mp2.shape, img_pairs.shape)
+    print("mp1:" , mp1[:5])
+    print("mp2:" , mp2[:5])
+    print("img_pairs:" , img_pairs[:5])
 
     # Get inlier features
     mp1_inliers, mp2_inliers, img_pairs_inliers = getInliers(mp1, mp2, img_pairs, numIter=100, threshold=0.002)
@@ -76,9 +80,15 @@ def main():
     nlt_world_pts = nlt_world_pts/nlt_world_pts[:,3].reshape(-1, 1)
     print("\nOptimized world_pts:\n", np.shape(nlt_world_pts))
 
-    # PnP RANSAC
-    R_best, C_best = PnPRANSAC(K, img1_mp1, nlt_world_pts, 100, 5)
-    print("\nR after PnP RANSAC:\n", R_best)
-    print("\nC after PnP RANSAC:\n", C_best)
-    
+    for i in range(len(num_images)):
+        # PnP RANSAC
+        R_best, C_best = PnPRANSAC(K, img1_mp1, nlt_world_pts, 100, 5)
+        print("\nR after PnP RANSAC:\n", R_best)
+        print("\nC after PnP RANSAC:\n", C_best)
+
+        R_i, C_i = NonlinearPnp(X, img1_mp1, K, C_best, R_best)
+        print("\nR after NonlinearPnp:\n", R_i)
+        print("\nC after NonlinearPnp:\n", C_i)
+
+        
 main()
