@@ -13,6 +13,8 @@ from NonlinearPnP import NonlinearPnp
 from NonlinearTriangulation import *
 from LinearPnP import *
 from PnPRANSAC import PnPRANSAC
+from NonlinearPnP import NonlinearPnp
+from BuildVisibilityMatrix import *
 
 def main():
     data_path = './Data/*.jpg'
@@ -42,6 +44,10 @@ def main():
     img2_mp2 = mp2_inliers[im1im2_feature_pairs]
     print("\nNumber of matching features between first two images:\n", np.shape(im1im2_feature_pairs), np.shape(img1_mp1), np.shape(img2_mp2))
 
+    # Save which feature indexes we are using
+    feature_pairs_loc = np.zeros((len(mp1_inliers),1), dtype=int)
+    feature_pairs_loc[im1im2_feature_pairs] = 1
+
     # Get fundamental matrix
     F = estimateFundamentalMatrix(img1_mp1, img2_mp2)
     print("\nF:\n", F)
@@ -68,27 +74,72 @@ def main():
     print("\nWorld_pts:\n", np.shape(world_pts))
 
     # Disambiguation of camera pose
-    R_best, C_best, world_pts_best = get_best_pose(world_pts, Rest, Cest)
+    R_best, C_best, world_pts_best = DisambiguateCameraPose(world_pts, Rest, Cest)
     print("wp best:", world_pts_best[0])
     print("\nR after disambiguation:\n", R_best)
     print("\nC after disambiguation:\n", C_best)
 
     # Nonlinear Triangulation
-    _R = np.eye(3)
-    _C = np.zeros((3,1))
     nlt_world_pts = NonlinearTriangulation(K, _C, _R, C_best, R_best, img1_mp1, img2_mp2, world_pts_best)
     nlt_world_pts = nlt_world_pts/nlt_world_pts[:,3].reshape(-1, 1)
     print("\nOptimized world_pts:\n", np.shape(nlt_world_pts))
 
-    for i in range(len(num_images)):
-        # PnP RANSAC
-        R_best, C_best = PnPRANSAC(K, img1_mp1, nlt_world_pts, 100, 5)
-        print("\nR after PnP RANSAC:\n", R_best)
-        print("\nC after PnP RANSAC:\n", C_best)
+    # We have R and C of camera pose 1 and 2 at this point
+    C_set = [_C, C_best]
+    R_set = [_R, R_best]
+    X_all = np.zeros((len(mp1_inliers), X.shape[-1]))
+    # feature_pairs_loc[]
+    # feature_pairs_loc in line 48 store 0, 1 of unkown and known 3d points
+    idx = 0
+    for i in range(len(X_all)):
+        if feature_pairs_loc[i,0] == 1:
+            X_all[i,:] = nlt_world_pts[idx,:]
+            idx += 1
 
-        R_i, C_i = NonlinearPnp(X, img1_mp1, K, C_best, R_best)
-        print("\nR after NonlinearPnp:\n", R_i)
-        print("\nC after NonlinearPnp:\n", C_i)
+    for i in range(2, num_images):
+        # Get 2D points associated to the camera i
+        img_idx = np.zeros((len(mp1_inliers),1), dtype=int)
+        idx0 = np.where(img_pairs_inliers[:,0] == str(i+1))
+        idx1 = np.where(img_pairs_inliers[:,1] == str(i+1))
+        print(f"total features in Camera {i+1}:", len(idx0[0]) + len(idx1[0]))
+        img_idx[idx0] = 1
+        img_idx[idx1] = 1
+        print(type(img_idx), type(feature_pairs_loc))
+        img_idx = np.where(feature_pairs_loc[:,0] & img_idx[:,0])
+        # print(f"total features in Camera {i} after filtering:", len(img_idx[0]))
+        # feature_pairs_idx_0 = np.bitwise_and(feature_pairs_loc[:,0],img_pairs_inliers[:,0] == str(i+1))
+        # feature_pairs_idx_1 = np.bitwise_and(feature_pairs_loc[:,0],img_pairs_inliers[:,1] == str(i+1))
+        # feature_pairs_idx_1 = np.where((feature_pairs_loc[:,0]) & (img_pairs_inliers[:,1] == str(i+1)))
+        # print(feature_pairs_idx_0)
+        print()
+        print(img_idx)
+        break
+        
+        img_2d_0 = mp1_inliers[feature_pairs_idx_0]
+        feature_pairs_idx_1 = np.where(img_pairs_inliers[:,1] == str(i+1))
+        img_2d_1 = mp2_inliers[feature_pairs_idx_1]
+        x_i = np.vstack((img_2d_0, img_2d_1))
+
+        idx_all = np.hstack((feature_pairs_idx_0, feature_pairs_idx_1))
+        X_i = X_all[idx_all, :]
+        print("\nX_i shape:\n", np.shape(X_i))
+        print("\nX_i:\n", X_i[:20])
+
+        print("\nx_i shape:\n", np.shape(x_i))
+        print("\nx_i:\n", x_i[:20])
+
+        # # PnP RANSAC
+        # R_i, C_i = PnPRANSAC(K, x_i, X_i, 100, 5)
+        # print("\nR after PnP RANSAC:\n", R_i)
+        # print("\nC after PnP RANSAC:\n", C_i)
+
+        # R_i, C_i = NonlinearPnp(X, x_i, K, C_i, R_i)
+        # print("\nR after NonlinearPnp:\n", R_i)
+        # print("\nC after NonlinearPnp:\n", C_i)
+        # break
+
+
+
 
         
 main()

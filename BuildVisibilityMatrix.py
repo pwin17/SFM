@@ -1,19 +1,16 @@
 import numpy as np
-import cv2
 
-def VisibilityMatrix(mp_1, mp_2, img_pairs):
+def BuildVisibilityMatrix(img_pairs, num_imgs):
 
-    VisibilityMtx = np.zeros((6, img_pairs.shape[0]))
+    VisibilityMtx = np.zeros((img_pairs.shape[0], num_imgs))
     for j in range(img_pairs.shape[0]):
         i1, i2 = img_pairs[j]
-        for i in range(6):
+        for i in range(num_imgs):
             if i+1==int(i1):
-                
-                VisibilityMtx[i,j]=1
+                VisibilityMtx[j,i]=1
             elif i+1 == int(i2):
-                VisibilityMtx[i,j]=1
-
+                VisibilityMtx[j,i]=1
     return VisibilityMtx
 
-    
-
+def getVisibilityMatrix(fullVisibilityMatrix, rows):
+    return fullVisibilityMatrix[rows,:]

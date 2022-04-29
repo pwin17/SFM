@@ -1,6 +1,6 @@
 import numpy as np 
 
-def get_best_pose(pts_3D_all, R, C):
+def DisambiguateCameraPose(pts_3D_all, R, C):
     max_positive_z = 0
     idx = None
     for i in range(len(R)):
