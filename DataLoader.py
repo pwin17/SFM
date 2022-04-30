@@ -18,37 +18,37 @@ def readK(filedir):
                 i += 1
     return camMatrix
 
-def getFeatures(filepath):
+def loadFeatures(filepath):
     featurefiles = glob.glob(filepath)
-    featurefiles.sort() 
-    mp1 = []
-    mp2 = []
-    # rgb = []
-    img_pairs = []
-    
-    for featurefile in featurefiles:
-        main_img = featurefile[-5]
-        print(main_img)
-        featurestr = open(featurefile, 'r')
-        featurestr = featurestr.readlines()
+    featurefiles.sort()
 
-        for i in range(len(featurestr)):
-            if i == 0:
-                line = featurestr[i].split(':')
-                numFeatures = int(line[1])
-            else:
-                line = featurestr[i].split(' ')
-                numFeatures = int(line[0])
-                # featurergb = np.array([int(line[1]), int(line[2]), int(line[3])])
-                mainFeature = [float(line[4]), float(line[5]), float(1)]
-                j = 6
-                while numFeatures>1:
-                    # rgb.append(featurergb)
-                    pair = [main_img,line[j]]
-                    img_pairs.append(pair)
-                    mp1.append(mainFeature)
-                    mp2.append([float(line[j+1]), float(line[j+2]), float(1)])
-                    j += 3
-                    numFeatures -= 1
-        
-    return np.array(mp1), np.array(mp2), np.array(img_pairs), len(featurefiles)
+    features_x = []
+    features_y = []
+    feature_matching_map = []
+
+    for i in range(len(featurefiles)):
+        features = open(featurefiles[i], 'r')
+        features = features.readlines()
+
+        for j in range(1, len(features)): # skip first line
+            line = features[j].split(' ')
+            matches = int(line[0]) - 1
+            match_x = np.zeros((6,))
+            match_y = np.zeros((6,))
+            feature_matching_line = np.zeros((6,),dtype = int)
+            feature_matching_line[i] = 1
+            match_x[i] = line[4]
+            match_y[i] = line[5]
+
+            line = line[6:]
+            for _ in range(matches):
+                match_img = int(line[0]) - 1
+                feature_matching_line[match_img] = 1
+                match_x[match_img] = line[1]
+                match_y[match_img] = line[2]
+                line = line[3:]
+            features_x.append(match_x)
+            features_y.append(match_y)
+            feature_matching_map.append(feature_matching_line)
+
+    return np.array(features_x), np.array(features_y), np.array(feature_matching_map), len(featurefiles)

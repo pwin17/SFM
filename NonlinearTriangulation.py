@@ -5,7 +5,7 @@ from LinearTriangulation import getP
 def NonlinearTriangulation(K, C0, R0, C1, R1, mp1, mp2, worldpts):
     # Given 2D points, this function computes the 3D point using linear triangulation
     I = np.eye(3)
-
+    C0 = C0.reshape(-1,1)
     C0 = np.hstack((I, -1*C0))
     P01, P02, P03 = getP(K, R0, C0)
 

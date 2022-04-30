@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-import glob
+import pickle
 
 from DataLoader import *
 from GetInliersRANSAC import *
@@ -9,14 +9,17 @@ from EsstentialMatrixFromFundamentalMatrix import *
 from ExtractCameraPose import *
 from LinearTriangulation import *
 from DisambiguateCameraPose import *
-from NonlinearPnP import NonlinearPnp
+from NonlinearPnP import *
 from NonlinearTriangulation import *
 from LinearPnP import *
-from PnPRANSAC import PnPRANSAC
-from NonlinearPnP import NonlinearPnp
+from PnPRANSAC import *
+from NonlinearPnP import *
 from BuildVisibilityMatrix import *
+from BundleAdjustment import *
 
 def main():
+    load_data = True
+    save_data = True
     data_path = './Data/*.jpg'
     calib_path = './Data/calibration.txt'
     features_path = './Data/matching*.txt'
@@ -26,30 +29,24 @@ def main():
     print("\nK:\n", K)
 
     # Get features from matching files
-    mp1, mp2, img_pairs, num_images = getFeatures(features_path)
-    print("\nMatch points and image pairs(mp1, mp2, pair):\n", mp1.shape, mp2.shape, img_pairs.shape)
-    print("mp1:" , mp1[:5])
-    print("mp2:" , mp2[:5])
-    print("img_pairs:" , img_pairs[:5])
+    features_x, features_y, features_matching_map, num_images = loadFeatures(features_path)
+    print("\Total features:\n", np.sum(np.sum(features_matching_map)))
+
 
     # Get inlier features
-    mp1_inliers, mp2_inliers, img_pairs_inliers = getInliers(mp1, mp2, img_pairs, numIter=100, threshold=0.002)
-    print("\nInlier match points and image pairs(mp1, mp2, pair):\n", mp1_inliers.shape, mp2_inliers.shape, img_pairs_inliers.shape)
+    if load_data:
+        inlier_features_map = np.load('inlier_features_map.npz')['arr_0']
+        with open('F_matrices.pkl', 'rb') as f:
+            F_matrices = pickle.load(f)
+        
+    else:
+        # Get inlier features and fundamental matrix for all possible image pairs
+        F_matrices, inlier_features_map = getInliersRANSAC(features_x, features_y, features_matching_map, save=save_data)
 
-    # Get feature pairs from first two images to initialize F
-    im1im2_feature_pairs = np.where(img_pairs_inliers[:,0] == '1')
-    temp_img_pairs_inliers = img_pairs_inliers[im1im2_feature_pairs]
-    im1im2_feature_pairs = np.where(temp_img_pairs_inliers[:,1] == '2')
-    img1_mp1 = mp1_inliers[im1im2_feature_pairs]
-    img2_mp2 = mp2_inliers[im1im2_feature_pairs]
-    print("\nNumber of matching features between first two images:\n", np.shape(im1im2_feature_pairs), np.shape(img1_mp1), np.shape(img2_mp2))
+    print("\Inlier features:\n", np.sum(np.sum(inlier_features_map)))
 
-    # Save which feature indexes we are using
-    feature_pairs_loc = np.zeros((len(mp1_inliers),1), dtype=int)
-    feature_pairs_loc[im1im2_feature_pairs] = 1
-
-    # Get fundamental matrix
-    F = estimateFundamentalMatrix(img1_mp1, img2_mp2)
+    # Get fundamental matrix associated with cam pos 1 and 2
+    F = F_matrices[(0,1)]
     print("\nF:\n", F)
 
     # Get essential matrix
@@ -64,82 +61,102 @@ def main():
     # Linear Triangulation
     _R = np.eye(3)
     _C = np.zeros((3,1))
-    world_pts = []
+    X_all = []
+    # Get cam pos 1 and 2 feature pairs
+    idx_1_2 = np.array(np.where(inlier_features_map[:,0] & inlier_features_map[:,1])).reshape(-1)
+
+    pts1 = np.hstack((features_x[idx_1_2,0].reshape(-1,1), features_y[idx_1_2,0].reshape(-1,1)))
+    pts2 = np.hstack((features_x[idx_1_2,1].reshape(-1,1), features_y[idx_1_2,1].reshape(-1,1)))
+
     for i in range(len(Cest)):
         Ci = Cest[i]
         Ri = Rest[i]
-        X = LinearTriangulation(K, _C, _R, Ci, Ri, img1_mp1, img2_mp2)
+        X = LinearTriangulation(K, _C, _R, Ci, Ri, pts1, pts2)
         X = X/X[:,3].reshape(-1, 1)
-        world_pts.append(X)
-    print("\nWorld_pts:\n", np.shape(world_pts))
+        X_all.append(X)
+    print("\nWorld_pts before disambiguation:\n", np.shape(X_all))
 
     # Disambiguation of camera pose
-    R_best, C_best, world_pts_best = DisambiguateCameraPose(world_pts, Rest, Cest)
-    print("wp best:", world_pts_best[0])
+    R_best, C_best, X_all = DisambiguateCameraPose(X_all, Rest, Cest)
+    print("wp best:", np.shape(X_all))
     print("\nR after disambiguation:\n", R_best)
     print("\nC after disambiguation:\n", C_best)
 
     # Nonlinear Triangulation
-    nlt_world_pts = NonlinearTriangulation(K, _C, _R, C_best, R_best, img1_mp1, img2_mp2, world_pts_best)
-    nlt_world_pts = nlt_world_pts/nlt_world_pts[:,3].reshape(-1, 1)
-    print("\nOptimized world_pts:\n", np.shape(nlt_world_pts))
+    X_3D = NonlinearTriangulation(K, _C, _R, C_best, R_best, pts1, pts2, X_all)
+    X_3D = X_3D/X_3D[:,3].reshape(-1, 1)
+    print("\nOptimized world_pts:\n", np.shape(X_3D))
 
-    # We have R and C of camera pose 1 and 2 at this point
-    C_set = [_C, C_best]
-    R_set = [_R, R_best]
-    X_all = np.zeros((len(mp1_inliers), X.shape[-1]))
-    # feature_pairs_loc[]
-    # feature_pairs_loc in line 48 store 0, 1 of unkown and known 3d points
-    idx = 0
-    for i in range(len(X_all)):
-        if feature_pairs_loc[i,0] == 1:
-            X_all[i,:] = nlt_world_pts[idx,:]
-            idx += 1
+    # List of all 3D points found
+    X_all = np.zeros((features_x.shape[0],3))
+
+    # Flags of 3D points found in inliers
+    flag_3D_points = np.zeros((features_x.shape[0],1),dtype=int).reshape(-1)
+
+    # Setting triangulated 3D points flag to 1, which are inliers found in img1 and img2
+    flag_3D_points[idx_1_2] = 1
+    X_all[idx_1_2] = X_3D[:,:3]
+ 
+    #Excluding negative Z points
+    negative_z_idx = np.where(X_all[:,2]<0)
+    flag_3D_points[negative_z_idx] = 0
+    print("\n3D points:\n", np.sum(np.sum(flag_3D_points)))
+
+    # Register camera 1 and 2, taking 1 as reference: zero translation and I rotation
+    R_set = []
+    C_set = []
+    C_set.append(_C)
+    R_set.append(_R)
+    C_set.append(C_best)
+    R_set.append(R_best)
 
     for i in range(2, num_images):
-        # Get 2D points associated to the camera i
-        img_idx = np.zeros((len(mp1_inliers),1), dtype=int)
-        idx0 = np.where(img_pairs_inliers[:,0] == str(i+1))
-        idx1 = np.where(img_pairs_inliers[:,1] == str(i+1))
-        print(f"total features in Camera {i+1}:", len(idx0[0]) + len(idx1[0]))
-        img_idx[idx0] = 1
-        img_idx[idx1] = 1
-        print(type(img_idx), type(feature_pairs_loc))
-        img_idx = np.where(feature_pairs_loc[:,0] & img_idx[:,0])
-        # print(f"total features in Camera {i} after filtering:", len(img_idx[0]))
-        # feature_pairs_idx_0 = np.bitwise_and(feature_pairs_loc[:,0],img_pairs_inliers[:,0] == str(i+1))
-        # feature_pairs_idx_1 = np.bitwise_and(feature_pairs_loc[:,0],img_pairs_inliers[:,1] == str(i+1))
-        # feature_pairs_idx_1 = np.where((feature_pairs_loc[:,0]) & (img_pairs_inliers[:,1] == str(i+1)))
-        # print(feature_pairs_idx_0)
-        print()
-        print(img_idx)
-        break
+        print(f"PnP for image {i}")
         
-        img_2d_0 = mp1_inliers[feature_pairs_idx_0]
-        feature_pairs_idx_1 = np.where(img_pairs_inliers[:,1] == str(i+1))
-        img_2d_1 = mp2_inliers[feature_pairs_idx_1]
-        x_i = np.vstack((img_2d_0, img_2d_1))
+        found_3D_idx = np.array(np.where(flag_3D_points & inlier_features_map[:,i])).reshape(-1)
+        X = X_all[found_3D_idx]
+        x = np.hstack((features_x[found_3D_idx,i].reshape(-1,1), features_y[found_3D_idx,i].reshape(-1,1)))
+        # print("x shape:",x.shape)
+        R_i, C_i = PnPRANSAC(K, x, X, 1000, 5)
+        print("\nR ransac:\n", R_i)
+        print("\nC ransac:\n", C_i)
 
-        idx_all = np.hstack((feature_pairs_idx_0, feature_pairs_idx_1))
-        X_i = X_all[idx_all, :]
-        print("\nX_i shape:\n", np.shape(X_i))
-        print("\nX_i:\n", X_i[:20])
+        R_i, C_i = NonlinearPnp(X, x, K, C_i, R_i)
+        print("R nonlinear:\n", R_i)
+        print("C nonlinear:\n", C_i)
+        # Register i-th image/ camera pose:
+        C_set.append(C_i)
+        R_set.append(R_i)
 
-        print("\nx_i shape:\n", np.shape(x_i))
-        print("\nx_i:\n", x_i[:20])
+        for j in range(i):
+            # Triangulating all points between i-th image and all previous images sequentially
+            idx_j_i = np.array(np.where(inlier_features_map[:,j] & inlier_features_map[:,i])).reshape(-1)
+            if len(idx_j_i) < 8:
+                continue
+            print(f"triangulating img {i} and img {j} points")
+            x_i = np.hstack((features_x[idx_j_i,i].reshape(-1,1), features_y[idx_j_i,i].reshape(-1,1)))
+            x_j = np.hstack((features_x[idx_j_i,j].reshape(-1,1), features_y[idx_j_i,j].reshape(-1,1)))
+            Ci = C_set[i]
+            Ri = R_set[i]
+            Cj = C_set[j]
+            Rj = R_set[j]
 
-        # # PnP RANSAC
-        # R_i, C_i = PnPRANSAC(K, x_i, X_i, 100, 5)
-        # print("\nR after PnP RANSAC:\n", R_i)
-        # print("\nC after PnP RANSAC:\n", C_i)
+            X_ij = LinearTriangulation(K, Ci, Ri, Cj, Rj, x_i, x_j)
+            X_ij = X_ij/X_ij[:,3].reshape(-1, 1)
 
-        # R_i, C_i = NonlinearPnp(X, x_i, K, C_i, R_i)
-        # print("\nR after NonlinearPnp:\n", R_i)
-        # print("\nC after NonlinearPnp:\n", C_i)
-        # break
+            X_ij = NonlinearTriangulation(K, Ci, Ri, Cj, Rj, x_i, x_j, X_ij)
+            X_ij = X_ij/X_ij[:,3].reshape(-1, 1)
 
-
-
-
+            flag_3D_points[idx_j_i] = 1
+            X_all[idx_j_i] = X_ij[:,:3]
         
+        idx_2D3D, vizM = BuildVisibilityMatrix(flag_3D_points, inlier_features_map, i)
+        print("\nVisibility matrix:\n", vizM)
+        
+        R_set, C_set, X_all = BundleAdjustment(X_all, idx_2D3D, vizM, features_x, features_y, R_set, C_set, K, nCam = i)
+    print("Final Rotations:\n", R_set)
+    print("Final Translations:\n", C_set)
+    print("\n3D points:\n", np.sum(np.sum(flag_3D_points)))
+    print("\nActual 3D points:\n", np.shape(X_all))
+
 main()

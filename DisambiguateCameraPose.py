@@ -8,7 +8,7 @@ def DisambiguateCameraPose(pts_3D_all, R, C):
         C1 = C[i]
         r3 = R1[2,:]
         pts_3D = pts_3D_all[i]
-        pts_3D = (pts_3D/pts_3D[3,:])[:3,:]
+        pts_3D = (pts_3D/pts_3D[:,3].reshape(-1,1))[:,0:3]
         
         positive_z = get_positive_z_count(pts_3D,C1,r3)
         
@@ -19,10 +19,9 @@ def DisambiguateCameraPose(pts_3D_all, R, C):
 
 def get_positive_z_count(pts_3D,C,r3):
     positive_z = 0
-    for i in range(pts_3D.shape[1]):
-        X = pts_3D[:,i]
+    for X in pts_3D:
         val = np.dot(r3, (X - C))
-        if val>0:
+        if val>0 and X[2]>0:
             positive_z+=1
 
     return positive_z

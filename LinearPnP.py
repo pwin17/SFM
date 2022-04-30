@@ -4,6 +4,8 @@ Referred to this lecture (Slide 66 and onwards):
 https://www.cis.upenn.edu/~cis580/Spring2015/Lectures/cis580-13-LeastSq-PnP.pdf 
 '''
 def LinearPnP(K, X, x):
+    x = np.hstack((x, np.ones((x.shape[0],1))))
+    X = np.hstack((X, np.ones((X.shape[0],1))))
 
     x_normalized = np.matmul(np.linalg.inv(K), x.T)
     for i in range(len(X)):
