@@ -51,4 +51,4 @@ def loadFeatures(filepath):
             features_y.append(match_y)
             feature_matching_map.append(feature_matching_line)
 
-    return np.array(features_x), np.array(features_y), np.array(feature_matching_map), len(featurefiles)
+    return np.array(features_x), np.array(features_y), np.array(feature_matching_map), len(featurefiles)+1

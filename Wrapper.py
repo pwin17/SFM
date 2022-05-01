@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import pickle
+import matplotlib.pyplot as plt
 
 from DataLoader import *
 from GetInliersRANSAC import *
@@ -31,7 +32,6 @@ def main():
     # Get features from matching files
     features_x, features_y, features_matching_map, num_images = loadFeatures(features_path)
     print("\Total features:\n", np.sum(np.sum(features_matching_map)))
-
 
     # Get inlier features
     if load_data:
@@ -111,19 +111,19 @@ def main():
     R_set.append(R_best)
 
     for i in range(2, num_images):
-        print(f"PnP for image {i}")
+        print(f"----------------------------------PnP for image {i+1}----------------------------------")
         
         found_3D_idx = np.array(np.where(flag_3D_points & inlier_features_map[:,i])).reshape(-1)
         X = X_all[found_3D_idx]
         x = np.hstack((features_x[found_3D_idx,i].reshape(-1,1), features_y[found_3D_idx,i].reshape(-1,1)))
         # print("x shape:",x.shape)
         R_i, C_i = PnPRANSAC(K, x, X, 1000, 5)
-        print("\nR ransac:\n", R_i)
-        print("\nC ransac:\n", C_i)
+        # print("\nR ransac:\n", R_i)
+        # print("\nC ransac:\n", C_i)
 
         R_i, C_i = NonlinearPnp(X, x, K, C_i, R_i)
-        print("R nonlinear:\n", R_i)
-        print("C nonlinear:\n", C_i)
+        # print("R nonlinear:\n", R_i)
+        # print("C nonlinear:\n", C_i)
         # Register i-th image/ camera pose:
         C_set.append(C_i)
         R_set.append(R_i)
@@ -133,7 +133,7 @@ def main():
             idx_j_i = np.array(np.where(inlier_features_map[:,j] & inlier_features_map[:,i])).reshape(-1)
             if len(idx_j_i) < 8:
                 continue
-            print(f"triangulating img {i} and img {j} points")
+            print(f"triangulating img {i+1} and img {j+1} points")
             x_i = np.hstack((features_x[idx_j_i,i].reshape(-1,1), features_y[idx_j_i,i].reshape(-1,1)))
             x_j = np.hstack((features_x[idx_j_i,j].reshape(-1,1), features_y[idx_j_i,j].reshape(-1,1)))
             Ci = C_set[i]
@@ -149,14 +149,31 @@ def main():
 
             flag_3D_points[idx_j_i] = 1
             X_all[idx_j_i] = X_ij[:,:3]
+            print("appended ", len(idx_j_i), " points between ", j+1 ," and ", i+1)
         
         idx_2D3D, vizM = BuildVisibilityMatrix(flag_3D_points, inlier_features_map, i)
-        print("\nVisibility matrix:\n", vizM)
+        print("\nVisibility matrix:\n", vizM.shape)
         
         R_set, C_set, X_all = BundleAdjustment(X_all, idx_2D3D, vizM, features_x, features_y, R_set, C_set, K, nCam = i)
+        print(f"------------------------------------------------------------------------------------------")
+    return
     print("Final Rotations:\n", R_set)
     print("Final Translations:\n", C_set)
     print("\n3D points:\n", np.sum(np.sum(flag_3D_points)))
     print("\nActual 3D points:\n", np.shape(X_all))
+    flag_3D_points[X_all[:,2]<0] = 0    
+    feature_idx = np.where(flag_3D_points)
+    X = X_all[feature_idx]
+    x = X[:,0]
+    y = X[:,1]
+    z = X[:,2]
+
+    # For 3D plotting
+    fig = plt.figure(figsize = (10, 10))
+    ax = plt.axes(projection ="3d")
+    # Creating plot
+    ax.scatter3D(x, y, z, color = "green")
+    plt.show()
+    # plt.savefig(savepath+'3D.png')
 
 main()

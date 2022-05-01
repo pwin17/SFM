@@ -79,11 +79,14 @@ def BundleAdjustment(X_all, X_index, visiblity_matrix, feature_x, feature_y, R_s
 
     visible_x, visible_y = feature_x[X_index], feature_y[X_index]
     visible2Dpts = []
-    for i in range(visible_x.shape[0]):
-        for j in range(visible_x.shape[1]):
-            if visible_x[i,j] != 0 or visible_y[i,j] != 0:
+    for i in range(visiblity_matrix.shape[0]):
+        for j in range(visiblity_matrix.shape[1]):
+            if visiblity_matrix[i,j] == 1:
                 visible2Dpts.append([visible_x[i,j], visible_y[i,j]])
+    # print("2d points:", visible2Dpts)
     visible2Dpts = np.array(visible2Dpts).reshape(-1, 2)
+    # print('\n 2D Points: \n', visible2Dpts.shape)
+    # print('\n 3D Points: \n', visible3Dpts.shape)
 
     RC_list = []
     for i in range(nCam+1):
@@ -98,6 +101,10 @@ def BundleAdjustment(X_all, X_index, visiblity_matrix, feature_x, feature_y, R_s
     n_points = visible3Dpts.shape[0]
 
     camera_indices, point_indices = getCameraPointIndices(visiblity_matrix)
+    # print('\n Camera Indices: \n', camera_indices.shape)
+    # print('\n Camera Indices: \n', camera_indices)
+    # print('\n point Indices: \n', point_indices.shape)
+    # print('\n point Indices: \n', point_indices)
     
     A = bundle_adjustment_sparsity(X_index, visiblity_matrix, nCam)
 
@@ -114,7 +121,7 @@ def BundleAdjustment(X_all, X_index, visiblity_matrix, feature_x, feature_y, R_s
 
     optimized_C_set, optimized_R_set = [], []
     for i in range(len(optimized_camera_params)):
-        _R = Rotation.from_euler(optimized_camera_params[i, :3])
+        _R = Rotation.from_rotvec(optimized_camera_params[i, :3])
         R = _R.as_matrix()
         C = optimized_camera_params[i, 3:].reshape(3,1)
         optimized_C_set.append(C)
